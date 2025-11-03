@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@cloudflare/ai": "^1.2.2",
+    "agents": "^0.2.20"
+  }
+}
