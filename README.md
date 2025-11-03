@@ -15,3 +15,4 @@ Tech Stack
 	•	Cloudflare Workers AI
 	•	TypeScript / Node.js compatibility
 	•	In-memory state (Durable Objects optional)
+# cf_ai_investintel
