@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "reference_time": "2026-09-13T12:00:00+00:00",
+  "description": "Authored policy regression fixtures. Each scenario starts with a clean seeded database. This evaluates deterministic workflow execution, not model quality or real-world customer outcomes.",
+  "scenarios": [
+    {
+      "id": "eligible_partial_refund",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "execute"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 5000,
+        "execution_count": 1,
+        "action": "refund",
+        "final_status": "partially_refunded"
+      }
+    },
+    {
+      "id": "large_refund_requires_approval",
+      "case_id": "case-approval",
+      "tenant": "demo-shop",
+      "amount_pence": 15000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "execute",
+          "error": "approval_required"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "approved_large_refund",
+      "case_id": "case-approval",
+      "tenant": "demo-shop",
+      "amount_pence": 15000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "approve"
+        },
+        {
+          "operation": "execute"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 15000,
+        "execution_count": 1,
+        "action": "refund",
+        "final_status": "partially_refunded"
+      }
+    },
+    {
+      "id": "expired_purchase_rejected",
+      "case_id": "case-expired",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "propose",
+          "error": "window_expired"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "over_refund_rejected",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 10001,
+      "steps": [
+        {
+          "operation": "propose",
+          "error": "amount_exceeds_remaining"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "duplicate_execution_is_single_mutation",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "execute"
+        },
+        {
+          "operation": "execute",
+          "same_as_previous": true
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 5000,
+        "execution_count": 1,
+        "action": "refund",
+        "final_status": "partially_refunded"
+      }
+    },
+    {
+      "id": "idempotency_payload_conflict",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "propose",
+          "amount_pence": 4000,
+          "error": "idempotency_conflict"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "stale_case_version_rejected",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "advance_case_version"
+        },
+        {
+          "operation": "propose",
+          "version_offset": -1,
+          "error": "stale_case"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "changed_order_blocks_execution",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "advance_order_version"
+        },
+        {
+          "operation": "execute",
+          "error": "stale_order"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "changed_policy_blocks_execution",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 5000,
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "advance_policy"
+        },
+        {
+          "operation": "execute",
+          "error": "stale_policy"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "malicious_message_is_inert",
+      "case_id": "case-injection",
+      "tenant": "demo-shop",
+      "amount_pence": 2500,
+      "steps": [
+        {
+          "operation": "read_only"
+        },
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "execute"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 2500,
+        "execution_count": 1,
+        "action": "refund",
+        "final_status": "partially_refunded"
+      }
+    },
+    {
+      "id": "wrong_tenant_cannot_read_case",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 0,
+      "steps": [
+        {
+          "operation": "wrong_tenant_read",
+          "error": "not_found"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    },
+    {
+      "id": "human_handoff_without_refund",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 0,
+      "action": "escalate",
+      "steps": [
+        {
+          "operation": "propose"
+        },
+        {
+          "operation": "execute"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 1,
+        "action": "escalate",
+        "final_status": "escalated"
+      }
+    },
+    {
+      "id": "zero_refund_rejected",
+      "case_id": "case-eligible",
+      "tenant": "demo-shop",
+      "amount_pence": 0,
+      "steps": [
+        {
+          "operation": "propose",
+          "error": "invalid_request"
+        }
+      ],
+      "expected": {
+        "refund_delta_pence": 0,
+        "execution_count": 0,
+        "action": "refund"
+      }
+    }
+  ]
+}

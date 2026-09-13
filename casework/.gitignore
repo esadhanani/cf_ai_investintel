@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.casework/
+*.sqlite*
+*.db*
+.env
+.env.*
+.DS_Store
+.venv/
+artifacts/

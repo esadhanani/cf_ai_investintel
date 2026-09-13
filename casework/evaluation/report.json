@@ -1,0 +1,294 @@
+{
+  "evaluation": "deterministic_policy_regression",
+  "reference_time": "2026-09-13T12:00:00+00:00",
+  "scope": "Authored synthetic fixtures using the real workflow core and a clean database per scenario. No LLM or production-quality measurement.",
+  "scenario_count": 14,
+  "passed": 14,
+  "failed": 0,
+  "results": [
+    {
+      "id": "eligible_partial_refund",
+      "passed": true,
+      "expected_refund_delta_pence": 5000,
+      "actual_refund_delta_pence": 5000,
+      "expected_execution_count": 1,
+      "actual_execution_count": 1,
+      "final_case_status": "partially_refunded",
+      "audit_event_count": 3,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "outcome": "success"
+        }
+      ]
+    },
+    {
+      "id": "large_refund_requires_approval",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 2,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "error": "approval_required"
+        }
+      ]
+    },
+    {
+      "id": "approved_large_refund",
+      "passed": true,
+      "expected_refund_delta_pence": 15000,
+      "actual_refund_delta_pence": 15000,
+      "expected_execution_count": 1,
+      "actual_execution_count": 1,
+      "final_case_status": "partially_refunded",
+      "audit_event_count": 4,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "approve",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "outcome": "success"
+        }
+      ]
+    },
+    {
+      "id": "expired_purchase_rejected",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 1,
+      "steps": [
+        {
+          "operation": "propose",
+          "error": "window_expired"
+        }
+      ]
+    },
+    {
+      "id": "over_refund_rejected",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 1,
+      "steps": [
+        {
+          "operation": "propose",
+          "error": "amount_exceeds_remaining"
+        }
+      ]
+    },
+    {
+      "id": "duplicate_execution_is_single_mutation",
+      "passed": true,
+      "expected_refund_delta_pence": 5000,
+      "actual_refund_delta_pence": 5000,
+      "expected_execution_count": 1,
+      "actual_execution_count": 1,
+      "final_case_status": "partially_refunded",
+      "audit_event_count": 3,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "outcome": "success"
+        }
+      ]
+    },
+    {
+      "id": "idempotency_payload_conflict",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 2,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "propose",
+          "error": "idempotency_conflict"
+        }
+      ]
+    },
+    {
+      "id": "stale_case_version_rejected",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 1,
+      "steps": [
+        {
+          "operation": "advance_case_version",
+          "outcome": "success"
+        },
+        {
+          "operation": "propose",
+          "error": "stale_case"
+        }
+      ]
+    },
+    {
+      "id": "changed_order_blocks_execution",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 2,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "advance_order_version",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "error": "stale_order"
+        }
+      ]
+    },
+    {
+      "id": "changed_policy_blocks_execution",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 2,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "advance_policy",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "error": "stale_policy"
+        }
+      ]
+    },
+    {
+      "id": "malicious_message_is_inert",
+      "passed": true,
+      "expected_refund_delta_pence": 2500,
+      "actual_refund_delta_pence": 2500,
+      "expected_execution_count": 1,
+      "actual_execution_count": 1,
+      "final_case_status": "partially_refunded",
+      "audit_event_count": 3,
+      "steps": [
+        {
+          "operation": "read_only",
+          "outcome": "success"
+        },
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "outcome": "success"
+        }
+      ]
+    },
+    {
+      "id": "wrong_tenant_cannot_read_case",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 1,
+      "steps": [
+        {
+          "operation": "wrong_tenant_read",
+          "error": "not_found"
+        }
+      ]
+    },
+    {
+      "id": "human_handoff_without_refund",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 1,
+      "actual_execution_count": 1,
+      "final_case_status": "escalated",
+      "audit_event_count": 3,
+      "steps": [
+        {
+          "operation": "propose",
+          "outcome": "success"
+        },
+        {
+          "operation": "execute",
+          "outcome": "success"
+        }
+      ]
+    },
+    {
+      "id": "zero_refund_rejected",
+      "passed": true,
+      "expected_refund_delta_pence": 0,
+      "actual_refund_delta_pence": 0,
+      "expected_execution_count": 0,
+      "actual_execution_count": 0,
+      "final_case_status": "open",
+      "audit_event_count": 1,
+      "steps": [
+        {
+          "operation": "propose",
+          "error": "invalid_request"
+        }
+      ]
+    }
+  ]
+}

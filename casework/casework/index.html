@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Casework | Support operations</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="workspace">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Casework home"><span class="brand-mark">c</span>casework<span class="brand-dot">.</span></a>
+      <div class="team-label">WORKSPACE</div>
+      <label class="sr-only" for="tenant">Demo workspace</label>
+      <select id="tenant" aria-label="Demo workspace"></select>
+      <div class="nav-item active"><span>▤</span> Support inbox <span id="nav-count" class="count">0</span></div>
+      <div class="sidebar-bottom"><span class="status-dot"></span> Local demonstration<div>Synthetic customers and orders</div></div>
+    </aside>
+    <main>
+      <header class="topbar"><span>Operations <span class="slash">/</span> Support inbox</span><span class="demo-pill">DEMO WORKSPACE</span></header>
+      <section class="page-intro"><div><div class="eyebrow">SUPPORT OPERATIONS</div><h1>A clear path to resolution.</h1><p>Review the request, check the policy, then take action.</p></div><div class="avatar" title="Demo reviewer">ED</div></section>
+      <section class="stats" aria-label="Queue overview"><div><span>In your queue</span><strong id="stat-total">0</strong></div><div><span>Awaiting review</span><strong id="stat-review">0</strong></div><div><span>Cases actioned</span><strong id="stat-complete">0</strong></div><div class="stat-note"><span class="status-dot"></span><p>Every action has a review trail.</p></div></section>
+      <div id="notice" class="notice hidden" role="status"></div>
+      <section class="inbox-layout">
+        <section class="case-list-panel"><div class="panel-heading"><h2>All requests</h2><span id="queue-label">Live queue</span></div><div id="case-list" class="case-list" aria-label="Support cases"></div></section>
+        <section class="detail-panel" id="detail-panel"><div class="empty-state">Choose a request to review.</div></section>
+      </section>
+      <footer>Casework keeps review and execution separate. All records in this workspace are fictional.</footer>
+    </main>
+  </div>
+</body>
+</html>
