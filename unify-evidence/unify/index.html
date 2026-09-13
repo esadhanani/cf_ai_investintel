@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Unify Evidence</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main>
+<header><span class="eyebrow">LOCAL RESEARCH WORKSPACE</span><h1>Find the evidence.<br>Keep the source.</h1><p>Search synthetic investment and public-service documents. Every result links to its exact document version.</p></header>
+<form id="search"><label for="tenant">Workspace</label><select id="tenant"><option value="investment">Investment research</option><option value="public-service">Public services</option></select><label for="query">Search documents</label><div class="query-row"><input id="query" type="search" value="grid connection" maxlength="500" required placeholder="Try grid connection or housing repairs"><button type="submit">Search</button></div></form>
+<div class="examples"><button type="button" data-tenant="investment" data-query="grid connection">Grid connection risk</button><button type="button" data-tenant="investment" data-query="covenant headroom">Debt covenants</button><button type="button" data-tenant="public-service" data-query="housing repairs">Housing repairs</button><button type="button" data-tenant="public-service" data-query="step-free access">Accessible transport</button></div>
+<p id="status" role="status" aria-live="polite"></p><section id="results" aria-label="Search results"></section>
+<section id="source-panel" hidden><h2 id="source-title"></h2><p>Line numbers refer to the normalized text below.</p><pre id="source-text"></pre></section>
+<footer>Synthetic demonstration · No model calls · Lexical retrieval, not generated advice<br>Workspace filters demonstrate data separation. This local demo has no user authentication.</footer>
+</main></body></html>

@@ -1,0 +1,4 @@
+company,metric,value,interpretation
+Marsh Analytics,net leverage,4.2x,Synthetic base case only
+Marsh Analytics,covenant headroom,0.8x,Test downside earnings sensitivity before approval
+Marsh Analytics,recurring revenue retention,92 percent,Confirm treatment of customer downgrades

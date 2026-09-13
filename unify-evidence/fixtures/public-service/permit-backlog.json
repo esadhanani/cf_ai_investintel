@@ -1,0 +1,7 @@
+{
+  "service": "Fictional Fenwick permit team",
+  "disclaimer": "Entirely synthetic operating data.",
+  "permit_backlog": "A queue of 76 incomplete applications requires missing-document follow-up.",
+  "constraint": "Case officers must review exceptions before issuing any permit decision.",
+  "proposed_measure": "Track time awaiting applicant documents separately from internal review time."
+}

@@ -1,18 +1,41 @@
-InvestIntel: AI Market Intelligence Agent
+# Investment research tools
 
-InvestIntel is an AI powered market intelligence application built entirely on Cloudflare Workers AI.
-It summarises financial, macroeconomic, or company specific news into concise insights using Llama 3.3, and maintains short term context for users via lightweight in-memory state.
+Two small projects for working with documents and financial information.
 
-Key Features
-	•	Workers AI (Llama 3.3 70B Instruct) for summarisation
-	•	Short-term memory: retains the last five analyses per session
-	•	Simple REST API:
-	•	POST /query { topic }: generates a new summary
-	•	GET /history: fetches recent insights
-	•	Zero infrastructure: deployed entirely on Cloudflare’s edge (no servers, instant scale)
+## Unify Evidence
 
-Tech Stack
-	•	Cloudflare Workers AI
-	•	TypeScript / Node.js compatibility
-	•	In-memory state (Durable Objects optional)
-# cf_ai_investintel
+[Unify Evidence](unify-evidence/) is a local Python application for searching a versioned document collection. It uses SQLite full-text search, keeps sources attached to results and separates documents by tenant. It includes synthetic investment and public-service examples, an evaluation script and regression tests.
+
+The new September 2026 implementation develops ideas from an earlier Unify prototype. It runs offline and does not need a model API key. The included data is fictional.
+
+Start with the [project README](unify-evidence/README.md) for the demo and test commands.
+
+## InvestIntel
+
+The original November 2025 experiment is a small Cloudflare Workers AI summarisation endpoint. It sends user-supplied text to a model; it does not retrieve live news, verify financial facts or make investment decisions.
+
+The September 2026 update removes shared server-side history, validates requests, limits input size and handles provider errors. The repository no longer tracks installed dependencies.
+
+### Run the checks
+
+Node.js 24 or newer is required. There are no npm package dependencies.
+
+```sh
+npm test
+```
+
+The tests use a stub model and make no external requests. A passing test does not verify model quality or a live Cloudflare deployment.
+
+### API
+
+- `GET /` describes the service.
+- `POST /query` accepts JSON with a non-empty `topic` string, up to 8,000 characters. Supply the text you want summarised.
+- `GET /history` returns `410 Gone`. History is no longer stored in a shared worker instance.
+
+Successful queries return `summary` and `time`. Invalid requests return `400`, `413` or `415`; unsupported routes or methods return `404` or `405`; provider failures return `502` without internal exception details.
+
+`wrangler.toml` retains the original Workers AI binding. Running the live endpoint requires your own Cloudflare account and may incur model charges. This update does not deploy it. The model receives the supplied text. There is no built-in authentication or rate limiting, so the endpoint is intended as a small local or access-controlled demonstration.
+
+## Development
+
+The September 2026 work was developed with AI coding assistance and checked with executable tests. Examples and measurements should be read within their stated scope, not as evidence of production deployments or customers.

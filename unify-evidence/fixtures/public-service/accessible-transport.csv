@@ -1,0 +1,4 @@
+route,issue,next_action
+Route L3,step-free access unavailable at West Quay,Validate replacement accessible transport before service change
+Route M8,inconsistent live arrival information,Compare passenger notices against vehicle telemetry
+Route K2,evening timetable gap,Review demand and operating constraints
