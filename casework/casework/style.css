@@ -4,3 +4,4 @@
 .field-gap{height:13px}
 
 .suggestion-row{display:flex;gap:12px;align-items:center;margin-top:14px}.suggestion-row span{font-size:9px;color:#8c9880}
+.identity{font-size:10px;color:#819073;margin-top:12px;line-height:1.6}.identity button{display:block;border:0;background:none;color:#4c6c43;font-size:10px;padding:4px 0;text-decoration:underline}.identity button.hidden{display:none}.auth-panel{max-width:560px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:32px;margin:30px auto}.auth-panel.hidden,.inbox-layout.hidden{display:none}.auth-panel h2{font-family:Georgia,serif;font-size:28px;font-weight:400;margin:12px 0}.auth-panel p{color:#7d8a73;font-size:12px;line-height:1.8}.auth-panel form{margin:24px 0}.auth-panel button{margin-top:14px}.auth-panel .auth-footnote{font-size:10px;border-top:1px solid var(--line);padding-top:16px}

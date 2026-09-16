@@ -1,0 +1,5 @@
+order_id,customer_id,total_pence,purchased_at,case_id,customer_message
+order-fixture-1,customer-fixture-1,7500,2026-09-10T12:00:00Z,case-fixture-1,Synthetic unused item returned.
+order-fixture-2,customer-fixture-2,25000,2026-09-11T12:00:00Z,case-fixture-2,Synthetic damaged delivery requires review.
+order-fixture-3,customer-fixture-3,7.50,2026-09-10T12:00:00Z,case-fixture-3,Synthetic invalid decimal amount is quarantined.
+order-fixture-1,customer-fixture-1,8000,2026-09-10T12:00:00Z,case-fixture-1,Synthetic conflicting order duplicate is quarantined.

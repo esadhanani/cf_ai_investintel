@@ -14,15 +14,17 @@
       <div class="team-label">WORKSPACE</div>
       <label class="sr-only" for="tenant">Demo workspace</label>
       <select id="tenant" aria-label="Demo workspace"></select>
+      <div class="identity"><span id="identity-label">Unrestricted local demo</span><button id="sign-out" class="hidden" type="button">Sign out</button></div>
       <div class="nav-item active"><span>▤</span> Support inbox <span id="nav-count" class="count">0</span></div>
       <div class="sidebar-bottom"><span class="status-dot"></span> Local demonstration<div>Synthetic customers and orders</div></div>
     </aside>
     <main>
-      <header class="topbar"><span>Operations <span class="slash">/</span> Support inbox</span><span class="demo-pill">DEMO WORKSPACE</span></header>
+      <header class="topbar"><span>Operations <span class="slash">/</span> Support inbox</span><span id="mode-label" class="demo-pill">DEMO WORKSPACE</span></header>
       <section class="page-intro"><div><div class="eyebrow">SUPPORT OPERATIONS</div><h1>A clear path to resolution.</h1><p>Review the request, check the policy, then take action.</p></div><div class="avatar" title="Demo reviewer">ED</div></section>
       <section class="stats" aria-label="Queue overview"><div><span>In your queue</span><strong id="stat-total">0</strong></div><div><span>Awaiting review</span><strong id="stat-review">0</strong></div><div><span>Cases actioned</span><strong id="stat-complete">0</strong></div><div class="stat-note"><span class="status-dot"></span><p>Every action has a review trail.</p></div></section>
       <div id="notice" class="notice hidden" role="status"></div>
-      <section class="inbox-layout">
+      <section id="auth-panel" class="auth-panel hidden"><div class="eyebrow">YOUR WORKSPACE</div><h2>Sign in to continue.</h2><p>Your access token determines your workspace and permissions. It is kept only in this page's memory.</p><form id="sign-in"><label for="access-token">Access token</label><input id="access-token" type="password" required autocomplete="off" spellcheck="false" placeholder="Paste your locally issued token"><button class="primary" type="submit">Sign in</button></form><p class="auth-footnote">Local role enforcement on fictional records. This prototype does not verify a person's real-world identity.</p></section>
+      <section id="inbox-layout" class="inbox-layout">
         <section class="case-list-panel"><div class="panel-heading"><h2>All requests</h2><span id="queue-label">Live queue</span></div><div id="case-list" class="case-list" aria-label="Support cases"></div></section>
         <section class="detail-panel" id="detail-panel"><div class="empty-state">Choose a request to review.</div></section>
       </section>

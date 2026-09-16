@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const state = { token: '', tenant: 'demo-shop', cases: [], selected: null, detail: null, busy: false,
-  listGeneration: 0, detailGeneration: 0 };
+  listGeneration: 0, detailGeneration: 0, accessToken: '', principal: null, authMode: 'demo', sessionGeneration: 0 };
+const can = (role) => state.authMode === 'demo' || state.principal?.role === role;
 const money = (pence) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(Number(pence || 0) / 100);
 const human = (value) => String(value || '').replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
 const done = (status) => ['resolved', 'refunded', 'partially_refunded', 'closed', 'executed', 'completed'].includes(status);
@@ -24,14 +25,18 @@ const append = (parent, ...children) => { parent.append(...children); return par
 const badge = (text, color = '') => node('span', `badge ${color}`, text);
 
 async function request(path, body) {
+  const session = state.sessionGeneration;
   const options = { headers: {} };
   if (body !== undefined) {
     options.method = 'POST';
     options.headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': state.token };
     options.body = JSON.stringify(body);
   }
+  if (state.accessToken) options.headers.Authorization = `Bearer ${state.accessToken}`;
   const response = await fetch(path, options);
   const data = await response.json();
+  if (session !== state.sessionGeneration) throw new Error('The signed-in identity changed.');
+  if (response.status === 401) showLogin();
   if (!response.ok) throw new Error(data.error?.message || 'The request could not be completed.');
   return data;
 }
@@ -115,7 +120,10 @@ function renderDetail() {
   if (threshold !== undefined) rules.push(`Refunds above ${money(threshold)} require approval.`);
   rules.push(`Case revision ${item.version}. Order revision ${order.version ?? 0}. Policy revision ${policy.version ?? 'current'}.`);
   body.append(node('p', 'policy-note', rules.join(' ')));
-  body.append(actionForm(item));
+  if (can('operator')) body.append(actionForm(item));
+  else body.append(node('p', 'policy-note', state.principal?.role === 'reviewer'
+    ? 'You can review and approve proposals. An operator creates and executes actions.'
+    : 'You have read-only access to cases and their review history.'));
   const proposals = item.proposals || [];
   for (const proposal of [...proposals].reverse()) body.append(proposalCard(proposal, item));
   body.append(timeline(audit));
@@ -188,16 +196,19 @@ function proposalCard(proposal, item) {
       approved ? 'Review approved. The order and policy will be checked again before execution.' : 'Policy checks passed. Ready to execute after your review.'));
   if (!invalid && !completed) {
     const controls = node('div', 'proposal-controls');
-    if (proposal.requires_approval && !approved) {
+    if (proposal.requires_approval && !approved && can('reviewer')) {
       const approve = node('button', 'secondary', 'Approve as reviewer'); approve.type = 'button';
       approve.addEventListener('click', () => mutate('/api/approve', { proposal_id: proposal.id }, 'Approval recorded. You can now execute the action.', context));
       controls.append(approve);
     }
-    const execute = node('button', 'primary', 'Execute action'); execute.type = 'button';
-    execute.disabled = Boolean(proposal.requires_approval && !approved);
-    execute.addEventListener('click', () => mutate('/api/execute', { proposal_id: proposal.id,
-      idempotency_key: `execute-${proposal.id}` }, 'Action completed. The order and review trail have been updated.', context));
-    controls.append(execute); card.append(controls);
+    if (can('operator')) {
+      const execute = node('button', 'primary', 'Execute action'); execute.type = 'button';
+      execute.disabled = Boolean(proposal.requires_approval && !approved);
+      execute.addEventListener('click', () => mutate('/api/execute', { proposal_id: proposal.id,
+        idempotency_key: `execute-${proposal.id}` }, 'Action completed. The order and review trail have been updated.', context));
+      controls.append(execute);
+    }
+    card.append(controls);
   }
   return card;
 }
@@ -236,28 +247,65 @@ async function mutate(path, fields, successMessage, context) {
   } catch (error) { notice(error.message, true); }
   finally {
     state.busy = false;
-    try { await refresh(); } catch (error) { notice(error.message, true); }
+    if (state.authMode === 'demo' || state.accessToken) {
+      try { await refresh(); } catch (error) { notice(error.message, true); }
+    }
   }
+}
+
+function showLogin() {
+  state.accessToken = ''; state.token = ''; state.principal = null;
+  state.authMode = 'roles'; state.cases = []; state.selected = null; state.detail = null;
+  ++state.sessionGeneration; ++state.listGeneration; ++state.detailGeneration;
+  $('access-token').value = '';
+  $('auth-panel').classList.remove('hidden');
+  $('inbox-layout').classList.add('hidden');
+  $('sign-out').classList.add('hidden');
+  $('identity-label').textContent = 'Sign in to your workspace';
+  $('mode-label').textContent = 'LOCAL ACCESS CONTROL';
+  $('tenant').replaceChildren(); $('tenant').disabled = true;
+  $('detail-panel').replaceChildren(); renderCases();
 }
 
 async function start() {
   try {
     const boot = await request('/api/bootstrap');
+    state.authMode = boot.auth_mode || 'demo';
+    if (boot.auth_required) { showLogin(); return; }
+    state.principal = boot.principal || null;
     state.token = boot.csrf_token;
+    if (state.principal) state.tenant = state.principal.tenant;
+    $('auth-panel').classList.add('hidden');
+    $('inbox-layout').classList.remove('hidden');
+    $('tenant').replaceChildren();
+    $('tenant').disabled = Boolean(state.principal);
+    $('mode-label').textContent = state.principal ? 'LOCAL ACCESS CONTROL' : 'DEMO WORKSPACE';
+    $('identity-label').textContent = state.principal ? `${state.principal.subject} · ${human(state.principal.role)}` : 'Unrestricted local demo';
+    $('sign-out').classList.toggle('hidden', !state.principal);
     for (const tenant of boot.tenants) {
       const option = node('option', '', tenant.name); option.value = tenant.id; $('tenant').append(option);
     }
     $('tenant').value = state.tenant;
-    $('tenant').addEventListener('change', async () => {
+    await refresh();
+  } catch (error) { notice(error.message, true); }
+}
+
+$('tenant').addEventListener('change', async () => {
       if (state.busy) { $('tenant').value = state.tenant; return; }
       state.tenant = $('tenant').value; state.selected = null; state.detail = null;
       ++state.detailGeneration;
       $('detail-panel').replaceChildren(node('div', 'empty-state', 'Loading workspace…'));
       notice();
       try { await refresh(); } catch (error) { notice(error.message, true); }
-    });
-    await refresh();
-  } catch (error) { notice(error.message, true); }
-}
+});
+$('sign-in').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  state.accessToken = $('access-token').value.trim();
+  $('access-token').value = '';
+  ++state.sessionGeneration;
+  notice();
+  await start();
+});
+$('sign-out').addEventListener('click', () => { showLogin(); notice('Signed out. Your access token was cleared from this page.'); });
 
 start();

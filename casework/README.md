@@ -27,6 +27,33 @@ All stores, customers, orders and money movements are fictional. Execution chang
 2. Propose the GBP 250 refund. It cannot execute before a review action. Approval is attached to that exact proposal and its case, order and policy versions.
 3. Try to refund the 45-day-old order. The execution rules reject it regardless of what the model or customer message says. Escalation remains available.
 
+## Import and reconcile
+
+```sh
+python3 -m casework import-orders fixtures/import/orders-mixed.csv --batch-key first-import
+python3 -m casework reconcile-refunds fixtures/import/refunds.csv
+python3 scripts/ingestion_benchmark.py
+```
+
+The importer accepts `order_id,customer_id,total_pence,purchased_at,case_id,customer_message`. Valid rows, source provenance and the batch result commit together; invalid rows are quarantined with a reason and physical CSV line. An exact batch retry returns the original report without duplicating records. Reusing its key for different data is rejected. Order or case updates invalidate stale proposals through version changes. Conflicting duplicate rows are quarantined; the first valid row wins.
+
+Reconciliation compares an external CSV export (`external_id,order_id,amount_pence`) with the local refund ledger. `external_id` must be the internal refund ID. Missing, duplicate, mismatched, unknown and invalid records are reported separately. It never writes to either ledger and is not a payment-provider connector.
+
+The [recorded synthetic import](evaluation/ingestion-report.json) created 5,000 orders, cases, audit entries and provenance records; an exact retry added none. Its local timing describes one machine and fixture, not production throughput.
+
+## Separate local roles
+
+```sh
+python3 -m casework provision
+python3 -m casework serve --auth-config .casework/access/config.json
+```
+
+Provisioning creates a new mode-0700 directory with mode-0600 configuration and token-delivery files. It refuses to overwrite an existing directory. `config.json` stores only token hashes; `tokens.json` holds the private credentials for local distribution. Keep both files out of version control. Tokens are not printed by the command.
+
+In this mode, the server derives the workspace and role from the token. Operators propose and execute, reviewers approve, and auditors can only read. A client cannot supply its own reviewer identity or expand its workspace. Removing a credential hash from the configuration revokes it on the next request. The browser keeps its token in memory and clears it at sign-out.
+
+These credentials demonstrate role separation, not verified human identity: whoever holds a token can use that role. The default server without `--auth-config` is explicitly an unauthenticated demo. Offline database and import commands are trusted local administration and bypass HTTP authorization.
+
 ## Local model
 
 With Ollama running and a model already installed:
@@ -87,13 +114,13 @@ python3 -m unittest discover -s tests -v
 python3 -m casework.evaluate
 ```
 
-Tests cover real database transactions, concurrent refunds, ownership checks, stale approvals, retry behaviour, rollback, HTTP requests and malformed model responses. CI runs offline and does not require Ollama.
+85 tests cover real database transactions, concurrent refunds, ownership checks, stale approvals, retry behaviour, rollback, HTTP requests and malformed model responses. CI runs offline and does not require Ollama.
 
 The separate [14 authored scenarios](evaluation/scenarios.json) verify persisted balances, execution counts, case state and audit references in a clean database per case. The [report](evaluation/report.json) records actual versus expected effects. A harness test deliberately changes an expected balance to confirm the evaluation reports a failure. These scenarios test execution policy, not language-model understanding.
 
 ## Boundaries
 
-This is a single-user local prototype. Workspace selection is a query filter, and the reviewer is a demo label, not an authenticated identity or independent approver. A production integration needs authenticated roles, a durable payment adapter, signed webhooks, reconciliation, and externally protected audit storage. The current audit records successful state changes, not every rejected request, and is not tamper-proof against database access.
+This remains a local prototype. Optional opaque-token access enforces roles and workspace scope at the HTTP boundary; the default demo has no authentication. A production integration needs managed identity, TLS, a durable payment adapter, signed webhooks, provider-specific reconciliation and externally protected audit storage. The current audit records successful state changes, not every rejected request, and is not tamper-proof against database access.
 
 The browser server binds to loopback, validates Host and Origin, requires a per-process request token for writes, limits body size and renders customer text as text nodes. Keep it local and use synthetic data. SQLite transactions cover this database only: they cannot guarantee exactly-once effects in an external payment provider.
 

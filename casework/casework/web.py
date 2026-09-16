@@ -1,4 +1,4 @@
-"""Loopback-only demonstration server. This is not an authentication boundary."""
+"""Loopback-only server with explicit demo or optional role-enforced access."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .core import DomainError
+from .auth import AuthError
 from .planner import PlannerError, plan_case
 
 MAX_BODY = 16_384
@@ -17,10 +18,11 @@ ASSETS = {"/": ("index.html", "text/html; charset=utf-8"),
           "/style.css": ("style.css", "text/css; charset=utf-8")}
 
 
-def make_server(store, port: int = 8765) -> ThreadingHTTPServer:
+def make_server(store, port: int = 8765, auth=None) -> ThreadingHTTPServer:
     """Return a bound server; caller starts serve_forever and closes it."""
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.store = store
+    server.auth = auth
     server.csrf_token = secrets.token_urlsafe(32)
     return server
 
@@ -65,6 +67,30 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _principal(self):
+        if self.server.auth is None:
+            return None
+        value = self.headers.get("Authorization", "")
+        if not value.startswith("Bearer "):
+            self._error(401, "Sign in with your access token.", "auth_required")
+            return False
+        try:
+            return self.server.auth.authenticate(value[7:])
+        except AuthError:
+            self._error(401, "The access token is invalid or no longer active.", "invalid_token")
+            return False
+
+    def _tenant(self, supplied, principal):
+        if principal is not None:
+            if supplied not in (None, "", principal.tenant):
+                self._error(403, "Your access is limited to your assigned workspace.", "tenant_forbidden")
+                return None
+            return principal.tenant
+        if not isinstance(supplied, str) or not supplied:
+            self._error(400, "Choose a demo workspace.")
+            return None
+        return supplied
+
     def do_GET(self) -> None:
         if not self._safe_request():
             return
@@ -74,14 +100,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, Path(__file__).with_name(filename).read_bytes(), content_type)
             return
         if parsed.path == "/api/bootstrap":
+            if self.server.auth is not None and not self.headers.get("Authorization"):
+                self._json(200, {"auth_required": True, "auth_mode": "roles"})
+                return
+            principal = self._principal()
+            if principal is False:
+                return
+            if principal is not None:
+                self._json(200, {"auth_required": False, "auth_mode": "roles",
+                    "csrf_token": self.server.csrf_token,
+                    "principal": {"subject": principal.subject, "tenant": principal.tenant, "role": principal.role},
+                    "tenants": [{"id": principal.tenant, "name": principal.tenant}]})
+                return
             self._json(200, {"csrf_token": self.server.csrf_token,
+                             "auth_mode": "demo", "auth_required": False,
                              "tenants": [{"id": "demo-shop", "name": "Fern & Field"},
                                          {"id": "other-shop", "name": "North House"}]})
             return
         query = parse_qs(parsed.query)
-        tenant = query.get("tenant", [""])[0]
-        if not tenant:
-            self._error(400, "Choose a demo workspace.")
+        principal = self._principal()
+        if principal is False:
+            return
+        tenant = self._tenant(query.get("tenant", [None])[0], principal)
+        if tenant is None:
             return
         try:
             if parsed.path == "/api/cases":
@@ -102,6 +143,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self._safe_request():
             return
+        principal = self._principal()
+        if principal is False:
+            return
+        if principal is not None:
+            permissions = {"/api/suggest": "operator", "/api/propose": "operator",
+                           "/api/execute": "operator", "/api/approve": "reviewer"}
+            required_role = permissions.get(urlsplit(self.path).path)
+            if required_role is not None and principal.role != required_role:
+                self._error(403, "Your role cannot perform this action.", "role_forbidden")
+                return
         token = self.headers.get("X-CSRF-Token", "")
         if not secrets.compare_digest(token.encode("utf-8"), self.server.csrf_token.encode("ascii")):
             self._error(403, "Reload the workspace before taking an action.", "missing_csrf")
@@ -128,16 +179,22 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw)
             if not isinstance(payload, dict):
                 raise ValueError("object required")
-            tenant, case_id = payload.get("tenant"), payload.get("case_id")
-            if not isinstance(tenant, str) or not tenant or not isinstance(case_id, str) or not case_id:
-                raise ValueError("tenant and case required")
+            case_id = payload.get("case_id")
+            if not isinstance(case_id, str) or not case_id:
+                raise ValueError("case required")
         except (ValueError, UnicodeDecodeError, TimeoutError):
             self._error(400, "The action request is incomplete or malformed.")
+            return
+        if principal is not None and {"actor", "role", "subject", "principal"}.intersection(payload):
+            self._error(403, "Identity and permissions come from your access token.", "identity_override")
+            return
+        tenant = self._tenant(payload.get("tenant"), principal)
+        if tenant is None:
             return
         try:
             path = urlsplit(self.path).path
             if path == "/api/suggest":
-                if set(payload) != {"tenant", "case_id"}:
+                if set(payload) not in ({"tenant", "case_id"}, {"case_id"}):
                     self._error(400, "A suggestion needs only the selected case and workspace.")
                     return
                 result = plan_case(self.server.store, tenant, case_id, model="mistral:latest", timeout=45)
@@ -145,7 +202,8 @@ class Handler(BaseHTTPRequestHandler):
                 request = {k: v for k, v in payload.items() if k not in ("tenant", "case_id")}
                 result = self.server.store.propose(tenant, case_id, request)
             elif path == "/api/approve":
-                result = self.server.store.approve(tenant, case_id, payload.get("proposal_id"), actor="demo-reviewer")
+                result = self.server.store.approve(tenant, case_id, payload.get("proposal_id"),
+                                                  actor=principal.subject if principal is not None else "demo-reviewer")
             elif path == "/api/execute":
                 result = self.server.store.execute(tenant, case_id, payload.get("proposal_id"), payload.get("idempotency_key"))
             else:

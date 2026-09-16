@@ -1,0 +1,33 @@
+{
+  "run_at_utc": "2026-09-16T22:33:29.652257+00:00",
+  "reference_time": "2026-09-16T12:00:00+00:00",
+  "scope": "One local run of 5000 deterministic synthetic rows in a temporary SQLite database; not production throughput or a customer workload.",
+  "environment": {
+    "python": "3.9.9",
+    "sqlite": "3.35.5",
+    "os": "Darwin",
+    "os_release": "25.5.0",
+    "architecture": "arm64"
+  },
+  "input_rows": 5000,
+  "input_bytes": 485072,
+  "batch_hash": "c072f45c38a777dac890c261f0d2b7fccfdd6f38a361d64088974df0508a8831",
+  "import_duration_seconds": 0.166165,
+  "exact_retry_duration_seconds": 0.010056,
+  "result": {
+    "accepted": 5000,
+    "updated": 0,
+    "unchanged": 0,
+    "quarantined": 0
+  },
+  "persisted_counts": {
+    "orders": 5000,
+    "cases": 5000,
+    "audit": 5000,
+    "import_records": 5000,
+    "import_issues": 0,
+    "import_batches": 1
+  },
+  "exact_retry_identical": true,
+  "passed": true
+}
