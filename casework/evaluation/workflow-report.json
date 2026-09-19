@@ -1,0 +1,124 @@
+{
+  "run_at_utc": "2026-09-19T21:37:03.722284+00:00",
+  "passed": true,
+  "scope": "Synthetic local HTTP integration. Scripted role credentials, not human review or a payment processor. No model called.",
+  "input_rows": 3,
+  "accepted_rows": 2,
+  "quarantined_rows": 1,
+  "batch_replay_identical": true,
+  "history_persisted": true,
+  "reviewer_import_denied": "role_forbidden",
+  "operator_approval_denied": "role_forbidden",
+  "execution_before_approval_denied": "approval_required",
+  "execution_replay_identical": true,
+  "refund_count": 1,
+  "refund_pence": 25000,
+  "mismatch_detected": true,
+  "corrected_export_matches": true,
+  "reconciliation_did_not_mutate_ledger": true,
+  "recorded_reviewer": "reviewer",
+  "requests": [
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/import-orders",
+      "status": 200
+    },
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/import-orders",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "GET",
+      "path": "/api/imports",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "GET",
+      "path": "/api/imports/workflow-import",
+      "status": 200
+    },
+    {
+      "role": "reviewer",
+      "method": "POST",
+      "path": "/api/import-orders",
+      "status": 403
+    },
+    {
+      "role": "operator",
+      "method": "GET",
+      "path": "/api/cases/workflow-review",
+      "status": 200
+    },
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/propose",
+      "status": 200
+    },
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/approve",
+      "status": 403
+    },
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/execute",
+      "status": 409
+    },
+    {
+      "role": "reviewer",
+      "method": "POST",
+      "path": "/api/approve",
+      "status": 200
+    },
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/execute",
+      "status": 200
+    },
+    {
+      "role": "operator",
+      "method": "POST",
+      "path": "/api/execute",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "GET",
+      "path": "/api/refunds",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "POST",
+      "path": "/api/reconcile-refunds",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "POST",
+      "path": "/api/reconcile-refunds",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "GET",
+      "path": "/api/refunds",
+      "status": 200
+    },
+    {
+      "role": "auditor",
+      "method": "GET",
+      "path": "/api/cases/workflow-review",
+      "status": 200
+    }
+  ]
+}

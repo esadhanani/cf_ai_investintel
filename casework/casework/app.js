@@ -1,6 +1,8 @@
 const $ = (id) => document.getElementById(id);
 const state = { token: '', tenant: 'demo-shop', cases: [], selected: null, detail: null, busy: false,
-  listGeneration: 0, detailGeneration: 0, accessToken: '', principal: null, authMode: 'demo', sessionGeneration: 0 };
+  listGeneration: 0, detailGeneration: 0, accessToken: '', principal: null, authMode: 'demo', sessionGeneration: 0,
+  view: 'inbox', operationsGeneration: 0, historyGeneration: 0, batchGeneration: 0,
+  fileGeneration: { import: 0, reconcile: 0 }, importBusy: false, reconcileBusy: false };
 const can = (role) => state.authMode === 'demo' || state.principal?.role === role;
 const money = (pence) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(Number(pence || 0) / 100);
 const human = (value) => String(value || '').replaceAll('_', ' ').replace(/^./, (c) => c.toUpperCase());
@@ -52,7 +54,10 @@ function renderCases() {
   $('nav-count').textContent = state.cases.length;
   $('stat-review').textContent = state.cases.filter((c) => !done(c.status) && c.status !== 'escalated').length;
   $('stat-complete').textContent = state.cases.filter((c) => done(c.status) || c.status === 'escalated').length;
-  for (const item of state.cases) {
+  const visibleCases = state.cases.slice(0, 200);
+  const selectedCase = state.cases.find((item) => item.id === state.selected);
+  if (selectedCase && !visibleCases.some((item) => item.id === state.selected)) visibleCases.push(selectedCase);
+  for (const item of visibleCases) {
     const card = node('button', `case-card ${state.selected === item.id ? 'selected' : ''}`);
     card.type = 'button';
     card.setAttribute('aria-pressed', String(state.selected === item.id));
@@ -64,6 +69,7 @@ function renderCases() {
     card.addEventListener('click', () => selectCase(item.id));
     $('case-list').append(card);
   }
+  if (state.cases.length > 200) $('case-list').append(node('p', 'field-hint', `Showing the first 200 of ${state.cases.length} requests, plus the selected case if needed.`));
   if (!state.cases.length) $('case-list').append(node('div', 'empty-state', 'No requests in this workspace.'));
 }
 
@@ -156,16 +162,17 @@ function actionForm(item) {
   const suggest = node('button', 'secondary', 'Draft with local AI'); suggest.type = 'button';
   suggest.addEventListener('click', async () => {
     const tenant = context.tenant; const caseId = context.case_id;
+    const session = state.sessionGeneration;
     suggest.disabled = true; suggest.textContent = 'Drafting suggestion…'; notice();
     try {
       const draft = await request('/api/suggest', { tenant, case_id: caseId });
-      if (state.selected !== caseId || state.tenant !== tenant) return;
+      if (state.selected !== caseId || state.tenant !== tenant || session !== state.sessionGeneration) return;
       action.value = draft.action;
       amount.value = (draft.amount_pence / 100).toFixed(2);
       amount.disabled = draft.action === 'escalate'; amount.required = !amount.disabled;
       reason.value = draft.reason;
       notice('Suggestion drafted. Review the amount and reason, then check the proposal. No action has been taken.');
-    } catch (error) { if (state.selected === caseId && state.tenant === tenant) notice(error.message, true); }
+    } catch (error) { if (state.selected === caseId && state.tenant === tenant && session === state.sessionGeneration) notice(error.message, true); }
     finally { suggest.disabled = false; suggest.textContent = 'Draft with local AI'; }
   });
   const suggestionRow = append(node('div', 'suggestion-row'), suggest, node('span', '', 'Optional draft. You review every action.'));
@@ -240,12 +247,14 @@ async function mutate(path, fields, successMessage, context) {
     return;
   }
   state.busy = true;
+  const session = state.sessionGeneration;
   document.querySelectorAll('#detail-panel button').forEach((button) => { button.disabled = true; });
   try {
     await request(path, { ...fields, tenant: context.tenant, case_id: context.case_id });
-    notice(successMessage);
-  } catch (error) { notice(error.message, true); }
+    if (session === state.sessionGeneration) notice(successMessage);
+  } catch (error) { if (session === state.sessionGeneration) notice(error.message, true); }
   finally {
+    if (session !== state.sessionGeneration) return;
     state.busy = false;
     if (state.authMode === 'demo' || state.accessToken) {
       try { await refresh(); } catch (error) { notice(error.message, true); }
@@ -257,6 +266,8 @@ function showLogin() {
   state.accessToken = ''; state.token = ''; state.principal = null;
   state.authMode = 'roles'; state.cases = []; state.selected = null; state.detail = null;
   ++state.sessionGeneration; ++state.listGeneration; ++state.detailGeneration;
+  state.busy = false;
+  clearOperations();
   $('access-token').value = '';
   $('auth-panel').classList.remove('hidden');
   $('inbox-layout').classList.add('hidden');
@@ -265,9 +276,11 @@ function showLogin() {
   $('mode-label').textContent = 'LOCAL ACCESS CONTROL';
   $('tenant').replaceChildren(); $('tenant').disabled = true;
   $('detail-panel').replaceChildren(); renderCases();
+  showView('inbox', false);
 }
 
 async function start() {
+  const session = state.sessionGeneration;
   try {
     const boot = await request('/api/bootstrap');
     state.authMode = boot.auth_mode || 'demo';
@@ -286,26 +299,273 @@ async function start() {
       const option = node('option', '', tenant.name); option.value = tenant.id; $('tenant').append(option);
     }
     $('tenant').value = state.tenant;
+    showView(state.view, false);
     await refresh();
-  } catch (error) { notice(error.message, true); }
+  } catch (error) { if (session === state.sessionGeneration) notice(error.message, true); }
 }
 
 $('tenant').addEventListener('change', async () => {
       if (state.busy) { $('tenant').value = state.tenant; return; }
       state.tenant = $('tenant').value; state.selected = null; state.detail = null;
+      clearOperations();
+      const context = scope();
+      state.cases = []; renderCases();
       ++state.detailGeneration;
       $('detail-panel').replaceChildren(node('div', 'empty-state', 'Loading workspace…'));
       notice();
-      try { await refresh(); } catch (error) { notice(error.message, true); }
+      try { await refresh(); } catch (error) { if (currentScope(context)) notice(error.message, true); }
+      if (currentScope(context) && state.view === 'imports') await loadHistory();
 });
 $('sign-in').addEventListener('submit', async (event) => {
   event.preventDefault();
   state.accessToken = $('access-token').value.trim();
   $('access-token').value = '';
   ++state.sessionGeneration;
+  clearOperations();
   notice();
   await start();
 });
 $('sign-out').addEventListener('click', () => { showLogin(); notice('Signed out. Your access token was cleared from this page.'); });
 
+const CSV_LIMIT = 2 * 1024 * 1024;
+const visibleLimit = 200;
+const signedIn = () => state.authMode === 'demo' || Boolean(state.accessToken && state.principal);
+const scope = () => ({ tenant: state.tenant, session: state.sessionGeneration, generation: state.operationsGeneration });
+const currentScope = (context) => context.tenant === state.tenant && context.session === state.sessionGeneration && context.generation === state.operationsGeneration;
+
+function operationStatus(id, text = '', error = false) {
+  $(id).textContent = text;
+  $(id).classList.toggle('error', error);
+}
+
+function clearOperations() {
+  ++state.operationsGeneration; ++state.historyGeneration; ++state.batchGeneration;
+  ++state.fileGeneration.import; ++state.fileGeneration.reconcile;
+  state.importBusy = false; state.reconcileBusy = false;
+  for (const id of ['import-text', 'reconcile-text', 'import-file', 'reconcile-file', 'import-batch-key']) $(id).value = '';
+  for (const id of ['import-result', 'reconcile-result', 'import-history', 'import-history-detail']) $(id).replaceChildren();
+  for (const id of ['import-status', 'reconcile-status', 'history-status']) operationStatus(id);
+  for (const id of ['import-submit', 'reconcile-submit', 'ledger-download', 'imports-refresh']) $(id).disabled = false;
+}
+
+function showView(view, load = true) {
+  if (!['inbox', 'imports', 'reconcile'].includes(view)) return;
+  state.view = view;
+  const labels = { inbox: ['Support inbox', 'A clear path to resolution.', 'Review the request, check the policy, then take action.'],
+    imports: ['Order imports', 'From source files to clear cases.', 'Validate rows, inspect issues and trace every imported order.'],
+    reconcile: ['Refund reconciliation', 'Make the records agree.', 'Find differences between a CSV export and the local refund ledger.'] };
+  const [label, title, description] = labels[view];
+  $('view-label').textContent = label; $('page-title').textContent = title; $('page-description').textContent = description;
+  for (const name of ['inbox', 'imports', 'reconcile']) {
+    $(`${name}-layout`).classList.toggle('hidden', !signedIn() || name !== view);
+    const button = $(`nav-${name}`);
+    button.classList.toggle('active', name === view);
+    if (name === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+    button.disabled = !signedIn();
+  }
+  $('inbox-stats').classList.toggle('hidden', !signedIn() || view !== 'inbox');
+  $('import-form').classList.toggle('hidden', !can('operator'));
+  $('import-permission').classList.toggle('hidden', can('operator'));
+  if (load && signedIn() && view === 'imports') loadHistory();
+}
+
+function checkedCSV(value) {
+  if (!value.trim()) throw new Error('Choose a CSV file or paste its contents first.');
+  if (new TextEncoder().encode(value).length > CSV_LIMIT) throw new Error('CSV exceeds the 2 MiB limit.');
+  return value;
+}
+
+function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+
+function simpleTable(headers, rows) {
+  const wrapper = node('div', 'table-scroll');
+  const table = node('table', 'operations-table');
+  const head = node('thead'); const heading = node('tr');
+  for (const label of headers) { const th = node('th', '', label); th.scope = 'col'; heading.append(th); }
+  head.append(heading); table.append(head);
+  const body = node('tbody');
+  for (const values of rows.slice(0, visibleLimit)) {
+    const tr = node('tr');
+    for (const value of values) { const td = node('td'); if (value instanceof Node) td.append(value); else td.textContent = String(value ?? ''); tr.append(td); }
+    body.append(tr);
+  }
+  table.append(body); wrapper.append(table);
+  if (rows.length > visibleLimit) wrapper.append(node('p', 'field-hint', `Showing the first ${visibleLimit} of ${rows.length} rows. The summary covers every row.`));
+  return wrapper;
+}
+
+function summaryCards(entries) {
+  const cards = node('div', 'result-summary');
+  for (const [label, count] of entries) cards.append(append(node('div'), node('span', '', label), node('strong', '', count)));
+  return cards;
+}
+
+function renderImport(result, target) {
+  const context = scope();
+  const panel = $(target); panel.replaceChildren();
+  panel.append(node('h3', '', `Batch ${result.batch_key}`), summaryCards([
+    ['New records', result.accepted], ['Updated', result.updated], ['Unchanged', result.unchanged], ['Quarantined', result.quarantined]]));
+  panel.append(node('p', 'hash-note', `Source SHA-256: ${result.batch_hash}`));
+  const issues = result.issues || [];
+  if (issues.length) {
+    panel.append(node('h4', '', 'Rows that need attention'), simpleTable(['CSV line', 'Issue', 'Detail'], issues.map((item) => [item.row, human(item.code), item.message])));
+  } else panel.append(node('p', 'field-hint', 'No rows were quarantined.'));
+  const records = result.rows || [];
+  if (records.length) {
+    panel.append(node('h4', '', 'Imported records'));
+    const rows = records.slice(0, visibleLimit).map((item) => {
+      const open = node('button', 'text-button', item.case_id); open.type = 'button';
+      open.addEventListener('click', async () => {
+        if (!currentScope(context)) return;
+        state.selected = item.case_id; showView('inbox');
+        try { await refresh(); } catch (error) { if (currentScope(context)) notice(error.message, true); }
+      });
+      return [item.row, item.order_id, open, human(item.status)];
+    });
+    panel.append(simpleTable(['CSV line', 'Order', 'Open case', 'Result'], rows));
+    if (records.length > visibleLimit) panel.append(node('p', 'field-hint', `Showing the first ${visibleLimit} of ${records.length} records. The saved batch result and summary include every row.`));
+  } else panel.append(node('p', 'field-hint', 'No records were accepted from this batch. Correct the row issues and use a new batch key.'));
+}
+
+async function loadHistory() {
+  if (!signedIn()) return;
+  const context = scope(); const generation = ++state.historyGeneration;
+  operationStatus('history-status', 'Loading import history…');
+  $('imports-refresh').disabled = true;
+  try {
+    const response = await request(`/api/imports?tenant=${encodeURIComponent(context.tenant)}`);
+    if (!currentScope(context) || generation !== state.historyGeneration) return;
+    $('import-history').replaceChildren();
+    const batches = response.batches || [];
+    if (!batches.length) $('import-history').append(node('p', 'empty-state compact', 'No import batches yet.'));
+    else {
+      const rows = batches.map((batch) => {
+        const button = node('button', 'text-button', batch.batch_key); button.type = 'button';
+        button.addEventListener('click', () => loadBatch(batch.batch_key));
+        return [button, new Date(batch.created_at).toLocaleString('en-GB'), batch.accepted, batch.updated, batch.unchanged, batch.quarantined];
+      });
+      $('import-history').append(simpleTable(['Batch', 'Imported', 'New', 'Updated', 'Unchanged', 'Issues'], rows));
+    }
+    operationStatus('history-status', `${batches.length} saved ${batches.length === 1 ? 'batch' : 'batches'}. Select a batch to inspect its original result.`);
+  } catch (error) { if (currentScope(context) && generation === state.historyGeneration) operationStatus('history-status', error.message, true); }
+  finally { if (currentScope(context) && generation === state.historyGeneration) $('imports-refresh').disabled = false; }
+}
+
+async function loadBatch(key) {
+  const context = scope(); const generation = ++state.batchGeneration;
+  $('import-history-detail').replaceChildren(node('p', 'operation-status', 'Loading batch details…'));
+  try {
+    const result = await request(`/api/imports/${encodeURIComponent(key)}?tenant=${encodeURIComponent(context.tenant)}`);
+    if (!currentScope(context) || generation !== state.batchGeneration) return;
+    renderImport(result, 'import-history-detail');
+  } catch (error) {
+    if (currentScope(context) && generation === state.batchGeneration) $('import-history-detail').replaceChildren(node('p', 'operation-status error', error.message));
+  }
+}
+
+function renderReconciliation(result) {
+  const groups = [['matched', 'Matched'], ['missing_external', 'Missing from export'], ['duplicate_external', 'Duplicate IDs'],
+    ['mismatched', 'Value mismatches'], ['unknown_external', 'Unknown to ledger'], ['invalid_rows', 'Invalid rows']];
+  const panel = $('reconcile-result'); panel.replaceChildren();
+  panel.append(summaryCards(groups.map(([key, label]) => [label, (result[key] || []).length])));
+  panel.append(node('p', 'field-hint', 'Duplicate IDs are reported separately. Missing means an internal refund ID is absent from valid export rows. A match confirms these supplied fields only.'));
+  if (result.source_hash) panel.append(node('p', 'hash-note', `Export SHA-256: ${result.source_hash}`));
+  for (const [key, label] of groups) {
+    const rows = result[key] || [];
+    const details = node('details', 'reconciliation-group'); details.open = key !== 'matched' && rows.length > 0;
+    details.append(node('summary', '', `${label} (${rows.length})`));
+    if (!rows.length) details.append(node('p', 'field-hint', 'No entries in this group.'));
+    else if (key === 'mismatched') details.append(simpleTable(['CSV line', 'Refund ID', 'Export order', 'Ledger order', 'Export amount', 'Ledger amount'], rows.map((item) => [
+      item.external.row, item.external.external_id, item.external.order_id, item.internal.order_id, money(item.external.amount_pence), money(item.internal.amount_pence)])));
+    else if (key === 'duplicate_external') details.append(simpleTable(['Refund ID', 'CSV lines'], rows.map((item) => [item.external_id, (item.rows || []).join(', ')])));
+    else if (key === 'invalid_rows') details.append(simpleTable(['CSV line', 'Issue', 'Detail'], rows.map((item) => [item.row, human(item.code), item.message])));
+    else details.append(simpleTable(['CSV line', 'Refund ID', 'Order', 'Amount'], rows.map((item) => [item.row ?? 'Local ledger', item.external_id || item.id, item.order_id, money(item.amount_pence)])));
+    panel.append(details);
+  }
+}
+
+for (const kind of ['import', 'reconcile']) {
+  $(`${kind}-text`).addEventListener('input', () => { ++state.fileGeneration[kind]; });
+  $(`${kind}-file`).addEventListener('change', async () => {
+    const context = scope(); const generation = ++state.fileGeneration[kind];
+    const file = $(`${kind}-file`).files[0];
+    if (!file) return;
+    operationStatus(`${kind}-status`, 'Reading CSV file…');
+    try {
+      if (file.size > CSV_LIMIT) throw new Error('CSV exceeds the 2 MiB limit.');
+      const bytes = await file.arrayBuffer();
+      let text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch { throw new Error('CSV must be valid UTF-8 text. Re-export the file as UTF-8.'); }
+      if (!currentScope(context) || generation !== state.fileGeneration[kind]) return;
+      checkedCSV(text); $(`${kind}-text`).value = text;
+      operationStatus(`${kind}-status`, 'CSV loaded. Review the contents before continuing.');
+    } catch (error) { if (currentScope(context) && generation === state.fileGeneration[kind]) operationStatus(`${kind}-status`, error.message, true); }
+  });
+}
+
+$('import-sample').addEventListener('click', () => {
+  if (!can('operator')) return;
+  ++state.fileGeneration.import;
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const date = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const rows = [[`sample-order-${suffix}`, `sample-customer-${suffix}`, '7500', date, `sample-case-${suffix}`, 'Fictional unused item returned.'],
+    [`sample-order-review-${suffix}`, `sample-customer-review-${suffix}`, '25000', date, `sample-case-review-${suffix}`, 'Fictional damaged delivery. Please review the refund.']];
+  $('import-text').value = 'order_id,customer_id,total_pence,purchased_at,case_id,customer_message\n' + rows.map((row) => row.map(csvCell).join(',')).join('\n') + '\n';
+  $('import-file').value = ''; $('import-batch-key').value = `synthetic-${suffix}`;
+  operationStatus('import-status', 'Two fictional orders prepared. Import them to add cases to this workspace.');
+});
+
+$('import-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (state.importBusy || !can('operator') || !signedIn()) return;
+  const context = scope();
+  try {
+    const csv = checkedCSV($('import-text').value);
+    const key = $('import-batch-key').value.trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/.test(key)) throw new Error('Use a batch key of 1-96 letters, digits, underscores or hyphens, starting with a letter or digit.');
+    state.importBusy = true; $('import-submit').disabled = true;
+    operationStatus('import-status', 'Validating and importing records…'); $('import-result').replaceChildren();
+    const result = await request('/api/import-orders', { tenant: context.tenant, csv_text: csv, batch_key: key });
+    if (!currentScope(context)) return;
+    renderImport(result, 'import-result'); operationStatus('import-status', 'Batch saved. Review the counts and any quarantined rows below.');
+    await loadHistory();
+    if (currentScope(context)) await refresh();
+  } catch (error) { if (currentScope(context)) operationStatus('import-status', error.message, true); }
+  finally { if (currentScope(context)) { state.importBusy = false; $('import-submit').disabled = false; } }
+});
+
+$('reconcile-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (state.reconcileBusy || !signedIn()) return;
+  const context = scope();
+  try {
+    const csv = checkedCSV($('reconcile-text').value);
+    state.reconcileBusy = true; $('reconcile-submit').disabled = true;
+    operationStatus('reconcile-status', 'Comparing the export with the local ledger…'); $('reconcile-result').replaceChildren();
+    const result = await request('/api/reconcile-refunds', { tenant: context.tenant, csv_text: csv });
+    if (!currentScope(context)) return;
+    renderReconciliation(result); operationStatus('reconcile-status', 'Comparison complete. The ledger was not changed.');
+  } catch (error) { if (currentScope(context)) operationStatus('reconcile-status', error.message, true); }
+  finally { if (currentScope(context)) { state.reconcileBusy = false; $('reconcile-submit').disabled = false; } }
+});
+
+$('ledger-download').addEventListener('click', async () => {
+  const context = scope(); $('ledger-download').disabled = true;
+  operationStatus('reconcile-status', 'Preparing the local ledger export…');
+  try {
+    const result = await request(`/api/refunds?tenant=${encodeURIComponent(context.tenant)}`);
+    if (!currentScope(context)) return;
+    if (!result.refunds?.length) { operationStatus('reconcile-status', 'No refunds are recorded in this workspace yet.'); return; }
+    const csv = 'external_id,order_id,amount_pence\n' + result.refunds.map((item) => [item.id, item.order_id, item.amount_pence].map(csvCell).join(',')).join('\n') + '\n';
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = node('a'); link.href = url; link.download = `casework-${context.tenant}-synthetic-refunds.csv`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    operationStatus('reconcile-status', 'Local synthetic ledger downloaded. No payment provider was contacted.');
+  } catch (error) { if (currentScope(context)) operationStatus('reconcile-status', error.message, true); }
+  finally { if (currentScope(context)) $('ledger-download').disabled = false; }
+});
+
+$('imports-refresh').addEventListener('click', loadHistory);
+document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => { notice(); showView(button.dataset.view); }));
 start();

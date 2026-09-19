@@ -4,7 +4,7 @@ Small applications for working with evidence, customer requests and financial in
 
 ## Casework
 
-[Casework](casework/) is a support workflow application with a browser interface, optional local-model proposals and a transactional refund ledger. It checks policy and approval state before executing an action, prevents duplicate refunds and retains an audit trail.
+[Casework](casework/) is a support workflow application with a browser interface, optional local-model proposals and a transactional refund ledger. Its browser workspace imports orders, exposes invalid rows, checks policy and reviewer permissions before executing refunds, and reconciles external refund exports. Transactions prevent duplicate refunds and retain an audit trail.
 
 The [project README](casework/README.md) includes a reproducible demo and an observed failure: the local model proposed an expired refund, and the execution layer rejected it without changing the order balance. All data and payment effects are synthetic and local.
 

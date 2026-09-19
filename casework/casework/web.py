@@ -11,8 +11,12 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from .core import DomainError
 from .auth import AuthError
 from .planner import PlannerError, plan_case
+from .ingestion import import_orders, reconcile_refunds
+from .operations import get_import, list_imports, list_refunds
 
 MAX_BODY = 16_384
+MAX_CSV_BODY = 3 * 1024 * 1024
+CSV_ROUTES = frozenset({"/api/import-orders", "/api/reconcile-refunds"})
 ASSETS = {"/": ("index.html", "text/html; charset=utf-8"),
           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/style.css": ("style.css", "text/css; charset=utf-8")}
@@ -127,6 +131,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/cases":
                 self._json(200, {"cases": self.server.store.list_cases(tenant)})
+            elif parsed.path == "/api/imports":
+                self._json(200, {"batches": list_imports(self.server.store, tenant)})
+            elif parsed.path.startswith("/api/imports/"):
+                batch_key = unquote(parsed.path[len("/api/imports/"):])
+                self._json(200, get_import(self.server.store, tenant, batch_key))
+            elif parsed.path == "/api/refunds":
+                self._json(200, {"refunds": list_refunds(self.server.store, tenant)})
             elif parsed.path.startswith("/api/cases/"):
                 case_id = unquote(parsed.path[len("/api/cases/"):])
                 case = self.server.store.get_case(tenant, case_id)
@@ -143,13 +154,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self._safe_request():
             return
+        path = urlsplit(self.path).path
         principal = self._principal()
         if principal is False:
             return
         if principal is not None:
             permissions = {"/api/suggest": "operator", "/api/propose": "operator",
-                           "/api/execute": "operator", "/api/approve": "reviewer"}
-            required_role = permissions.get(urlsplit(self.path).path)
+                           "/api/execute": "operator", "/api/approve": "reviewer",
+                           "/api/import-orders": "operator"}
+            required_role = permissions.get(path)
             if required_role is not None and principal.role != required_role:
                 self._error(403, "Your role cannot perform this action.", "role_forbidden")
                 return
@@ -168,7 +181,8 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._error(411, "The request length is required.")
             return
-        if not 0 < size <= MAX_BODY:
+        body_limit = MAX_CSV_BODY if path in CSV_ROUTES else MAX_BODY
+        if not 0 < size <= body_limit:
             self._error(413, "The action request is too large or empty.")
             return
         self.connection.settimeout(5)
@@ -180,7 +194,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict):
                 raise ValueError("object required")
             case_id = payload.get("case_id")
-            if not isinstance(case_id, str) or not case_id:
+            if path not in CSV_ROUTES and (not isinstance(case_id, str) or not case_id):
                 raise ValueError("case required")
         except (ValueError, UnicodeDecodeError, TimeoutError):
             self._error(400, "The action request is incomplete or malformed.")
@@ -192,8 +206,16 @@ class Handler(BaseHTTPRequestHandler):
         if tenant is None:
             return
         try:
-            path = urlsplit(self.path).path
-            if path == "/api/suggest":
+            if path in CSV_ROUTES:
+                required = {"csv_text", "batch_key"} if path == "/api/import-orders" else {"csv_text"}
+                if set(payload) not in (required, required | {"tenant"}):
+                    self._error(400, "Provide only the CSV text, workspace and import batch key where required.")
+                    return
+                if path == "/api/import-orders":
+                    result = import_orders(self.server.store, tenant, payload["csv_text"], payload["batch_key"])
+                else:
+                    result = reconcile_refunds(self.server.store, tenant, payload["csv_text"])
+            elif path == "/api/suggest":
                 if set(payload) not in ({"tenant", "case_id"}, {"case_id"}):
                     self._error(400, "A suggestion needs only the selected case and workspace.")
                     return

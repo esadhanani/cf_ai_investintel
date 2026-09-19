@@ -27,6 +27,27 @@ All stores, customers, orders and money movements are fictional. Execution chang
 2. Propose the GBP 250 refund. It cannot execute before a review action. Approval is attached to that exact proposal and its case, order and policy versions.
 3. Try to refund the 45-day-old order. The execution rules reject it regardless of what the model or customer message says. Escalation remains available.
 
+## Browser operations workflow
+
+The workspace has three views: **Support inbox**, **Order imports** and **Refund reconciliation**.
+
+1. In Order imports, load the clearly labelled synthetic sample or supply a UTF-8 CSV. Import it with a batch key. Review the accepted, updated and quarantined rows; row issues retain their source line and reason. A saved batch can be reopened later.
+2. Open an imported case in the Support inbox. Review the order and propose a resolution, optionally using the local Mistral draft. Policy checks still decide whether it is allowed.
+3. For a refund above GBP 100, a reviewer credential must approve before an operator credential can execute. The unrestricted demo allows both actions; role-enforced mode requires separate credentials.
+4. In Refund reconciliation, compare an export with the recorded refunds. The view separates matches, missing records, duplicates and amount/order mismatches. This is a read-only comparison; it does not settle payments.
+
+The CSV import is restricted to operators in role-enforced mode. All three roles can inspect import history and run reconciliation. Workspace identity comes from the access token. Changing workspace or signing out clears the browser's operational data and pending results.
+
+## One complete checked workflow
+
+```sh
+python3 scripts/workflow_smoke.py
+```
+
+This launches a temporary authenticated HTTP server and exercises the real routes: import three fictional orders, quarantine the invalid row, retry the batch, reopen its history, reject an operator's approval attempt, block premature execution, approve with the reviewer role, execute once, retry without another refund, detect an incorrect external amount and reconcile its correction. It confirms reconciliation leaves the ledger unchanged.
+
+The [checked-in report](evaluation/workflow-report.json) records the observed HTTP statuses and final outcomes. The approvals are scripted test actions using distinct role credentials, not independent human review. The smoke check calls no model or external service and is also run in CI.
+
 ## Import and reconcile
 
 ```sh
@@ -114,7 +135,7 @@ python3 -m unittest discover -s tests -v
 python3 -m casework.evaluate
 ```
 
-85 tests cover real database transactions, concurrent refunds, ownership checks, stale approvals, retry behaviour, rollback, HTTP requests and malformed model responses. CI runs offline and does not require Ollama.
+Tests cover real database transactions, concurrent refunds, ownership checks, stale approvals, retry behaviour, rollback, HTTP requests and malformed model responses. CI runs offline and does not require Ollama.
 
 The separate [14 authored scenarios](evaluation/scenarios.json) verify persisted balances, execution counts, case state and audit references in a clean database per case. The [report](evaluation/report.json) records actual versus expected effects. A harness test deliberately changes an expected balance to confirm the evaluation reports a failure. These scenarios test execution policy, not language-model understanding.
 
